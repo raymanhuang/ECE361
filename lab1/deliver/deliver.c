@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(server_port);
+    server_addr.sin_port = htons(server_port); // port number (arg 2)
     if (inet_pton(AF_INET, server_address, &server_addr.sin_addr) <= 0) {
         perror("Invalid server address");
         return 1;
