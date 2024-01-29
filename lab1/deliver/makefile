@@ -4,17 +4,17 @@ SRCS=deliver.c
 OBJS=$(SRCS:.c=.o)
 MAIN=deliver
 
-all:    $(MAIN)
+all:	$(MAIN)
 	@echo Deliver executable has been compiled
 
 $(MAIN): $(OBJS)
-    $(CC) $(CFLAGS) -o $(MAIN) $(OBJS)
+	$(CC) $(CFLAGS) -o $(MAIN) $(OBJS)
 
 .c.o:
-    $(CC) $(CFLAGS) -c $<  -o $@
+	$(CC) $(CFLAGS) -c $<  -o $@
 
 clean:
-    rm -f *.o *~ $(MAIN)
+	rm -f *.o *~ $(MAIN)
 
 depend: $(SRCS)
-    makedepend $^
+	makedepend $^
