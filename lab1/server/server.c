@@ -4,7 +4,6 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-
 #define BUFFER_SIZE 1024
 
 int main(int argc, char* argv[]){
@@ -20,12 +19,14 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
+    // Creates the socket (domain, type, protocol)
     int server_socket = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(port); // host to network short
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // host to network long
 
+    // Checks the return value of bind
     if(bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
         printf("Try again with a different port number!\n");
         return 1;
@@ -35,7 +36,8 @@ int main(int argc, char* argv[]){
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    while(1){
+    while(1) {
+        // Used to recieve messages from a socket (sockfd, buffer, len, flags, src_addr, addrlen)
         ssize_t msg_length = recvfrom(server_socket, buffer, BUFFER_SIZE,
                                       0, (struct sockaddr*)&client_addr, &client_addr_len);
         if (msg_length < 0) {
@@ -43,10 +45,11 @@ int main(int argc, char* argv[]){
             break;
         }
         buffer[msg_length] = '\0';
+        
         // Check if the message is "ftp"
         const char* response = (strcmp(buffer, "ftp") == 0) ? "yes" : "no";
 
-        // Send response back to the client
+        // Send response back to the client (sockfd, buffer, len, flags, dest_addr, addrlen)
         ssize_t sent_len = sendto(server_socket, response, strlen(response), 0, 
                                   (struct sockaddr*) &client_addr, client_addr_len);
         if (sent_len < 0) {

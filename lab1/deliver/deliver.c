@@ -11,13 +11,14 @@
 #define BUFFER_SIZE 1024
 
 int main(int argc, char *argv[]) {
+    // Checking the length of the arguement
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <server address> <server port number>\n", argv[0]);
         return 1;
     }
 
     const char *server_address = argv[1];
-    unsigned short server_port = (unsigned short)atoi(argv[2]);
+    unsigned short server_port = (unsigned short)atoi(argv[2]); // ascii to int
 
     // Step 1: Ask the user to input a message
     printf("Please input a message (ftp <file name>):\n");
@@ -50,6 +51,7 @@ int main(int argc, char *argv[]) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(server_port); // port number (arg 2)
+    // inet_pton converts string from printable form to "network" form
     if (inet_pton(AF_INET, server_address, &server_addr.sin_addr) <= 0) {
         perror("Invalid server address");
         return 1;
