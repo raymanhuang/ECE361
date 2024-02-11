@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
+#include <math.h>
 
 #define BUFFER_SIZE 1024
 
@@ -64,12 +65,11 @@ int main(int argc, char *argv[]) {
 
     // Check format and file existence
     char *keyword = strtok(input, " ");
-    char *filename = strtok(NULL, " \n");
+    char *filename = strdup(strtok(NULL, " \n"));
     if (keyword == NULL || filename == NULL || strcmp(keyword, "ftp") != 0) {
         fprintf(stderr, "Invalid input format. Please use: ftp <file name>\n");
         return 1;
     }
-
     // Step 2: Check the existence of the file
     struct stat file_stat;
     if (stat(filename, &file_stat) != 0) {
@@ -82,17 +82,18 @@ int main(int argc, char *argv[]) {
         perror("Failed to open file");
         return 1;
     }
-q
     unsigned char* file_contents = malloc(file_stat.st_size);
     if (!file_contents) {
         perror("Memory allocation failed");
         fclose(file);
         return 1;
     }  
-
-    unsigned int total_fragments = ceil(file_stat.st_size / 1000);
+    
+    unsigned int total_fragments = ceil(file_stat.st_size / 1000.0);
+    printf("file size: %u\n", total_fragments);
 
     size_t bytes_read = fread(file_contents, sizeof(unsigned char), file_stat.st_size, file);
+    printf("bytes read %d\n", bytes_read);
     if (bytes_read < file_stat.st_size) {
         if (feof(file)) {
             printf("Premature end of file.\n");
@@ -105,8 +106,13 @@ q
     }
     fclose(file);
 
-    Packet* packets = malloc(total_fragments * sizeof(Packet));
+    for(size_t i = 0; i < file_stat.st_size; i++) {
+    printf("%c", file_contents[i]); // Print each byte in hex format
+    }
+    printf("\n");
 
+    Packet* packets = malloc(total_fragments * sizeof(Packet));
+    
     for(int i = 0; i < total_fragments; i++){
         packets[i].total_frag = total_fragments;
         packets[i].frag_no = i;
@@ -118,7 +124,6 @@ q
         }
         memcpy(packets[i].filedata, file_contents + (i * 1000), packets[i].size);
     }
-
     // File exists, proceed with sending file to the server
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
