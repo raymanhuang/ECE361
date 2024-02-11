@@ -108,7 +108,6 @@ int main(int argc, char* argv[]){
         printf("packet_len = %d\n", packet_len);
 
         Packet packet;
-        // Parse the received data into your Packet struct
         int parse_result = parse_packet(buffer, BUFFER_SIZE, &packet);
 
         // Check the result of parse_packet
