@@ -3,8 +3,67 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <stdlib.h>  // For atoi
+#include <unistd.h>  // For close
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 2048
+
+typedef struct packet {
+    unsigned int total_frag;
+    unsigned int frag_no;
+    unsigned int size;
+    char* filename;
+    char filedata[1000];
+} Packet;
+
+typedef struct ack_packet {
+    unsigned int ack_frag_no;
+} AckPacket;
+
+int parse_packet(const char *buffer, ssize_t buffer_len, Packet *packet) {
+    // Temporary variables to hold the parsed integers
+    unsigned int total_frag, frag_no, size;
+    char filename[FILENAME_MAX]; // Temporary buffer for the filename
+
+    // Parse the header
+    // The format %[^:] tells sscanf to read until the next colon
+    int scanned = sscanf(buffer, "%u:%u:%u:%[^:]:", &total_frag, &frag_no, &size, filename);
+    if (scanned != 4) { // Ensure that exactly four items were scanned
+        fprintf(stderr, "Failed to parse packet header\n");
+        return -1; // Error code for parsing failure
+    }
+
+    // Calculate the length of the header to find the start of the file data
+    // This includes the lengths of the numeric fields as strings and the colons, plus the filename and its null terminator
+    size_t filename_length = strlen(filename);
+    size_t header_length = 3 * (sizeof(unsigned int) + 1) + filename_length + 1; // 3 * sizeof(unsigned int) for the three integers and their colons, +1 for the colon after the filename
+
+    // Ensure we don't read past the buffer
+    if (header_length >= buffer_len || header_length + size > buffer_len) {
+        fprintf(stderr, "Packet data exceeds buffer length\n");
+        return -1;
+    }
+
+    // Allocate memory for the filename in the packet struct and copy it
+    packet->filename = strdup(filename);
+    if (!packet->filename) {
+        perror("Failed to allocate memory for filename");
+        return -1; // Error code for memory allocation failure
+    }
+
+    // Copy the file data from the buffer to the packet's filedata
+    const char *filedata_start = buffer + header_length;
+    memcpy(packet->filedata, filedata_start, size);
+
+    // Set the rest of the packet fields
+    packet->total_frag = total_frag;
+    packet->frag_no = frag_no;
+    packet->size = size;
+
+    return 0; // Success
+}
+
+
 
 int main(int argc, char* argv[]){
 
@@ -35,27 +94,109 @@ int main(int argc, char* argv[]){
     char buffer[BUFFER_SIZE];
     struct sockaddr_storage client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
+    ssize_t packet_len;
 
-    while(1) {
-        // Used to recieve messages from a socket (sockfd, buffer, len, flags, src_addr, addrlen)
-        ssize_t msg_length = recvfrom(server_socket, buffer, BUFFER_SIZE,
-                                      0, (struct sockaddr*)&client_addr, &client_addr_len);
-        if (msg_length < 0) {
-            printf("recvfrom failed\n");
-            break;
+    while(1){
+            // receive the first packet
+        packet_len = recvfrom(server_socket, buffer, BUFFER_SIZE,
+                        0, (struct sockaddr*)&client_addr, &client_addr_len);
+        if (packet_len == -1) {
+            perror("recvfrom failed");
+            // Handle error such as by exiting or attempting to receive again
+            close(server_socket);
+            return 1;
         }
-        buffer[msg_length] = '\0';
-        
-        // Check if the message is "ftp"
-        const char* response = (strcmp(buffer, "ftp") == 0) ? "yes" : "no";
 
-        // Send response back to the client (sockfd, buffer, len, flags, dest_addr, addrlen)
-        ssize_t sent_len = sendto(server_socket, response, strlen(response), 0, 
-                                  (struct sockaddr*) &client_addr, client_addr_len);
-        if (sent_len < 0) {
-            printf("sendto failed\n");
-            break;
+        Packet packet;
+        // Parse the received data into your Packet struct
+        int parse_result = parse_packet(buffer, packet_len, &packet);
+
+        // Check the result of parse_packet
+        if (parse_result == -1) {
+            fprintf(stderr, "Failed to parse the packet\n");
+            // Handle parsing error, potentially by cleaning up and exiting
+            close(server_socket);
+            return 1;
         }
+
+        // create the file and write the first packets data
+        unsigned int current_packet = 0;
+        int total_frags = packet.total_frag;
+        FILE* file_stream;
+        if(packet.frag_no == 0){
+            file_stream = fopen(packet.filename, "wb");
+            if (file_stream == NULL) {
+                perror("Error opening file to write");
+                free(packet.filename); 
+                close(server_socket);
+                return 1;
+            }
+            size_t bytes_written = fwrite(packet.filedata, sizeof(char), packet.size, file_stream);
+            if (bytes_written < packet.size) {
+                fprintf(stderr, "Failed to write all data to the file\n");
+                fclose(file_stream); // Close the file stream to flush and release the file
+                free(packet.filename); // Don't forget to free dynamically allocated memory
+                close(server_socket);
+                return 1;
+            }
+            if (packet.total_frag == 1) {
+                free(packet.filename);
+                fclose(file_stream);
+            }
+            free(packet.filename);
+        }
+        // Send ACK for packet 0
+        AckPacket ack;
+        ack.ack_frag_no = htonl(current_packet);
+        ssize_t sent_bytes = sendto(server_socket, &ack, sizeof(ack), 0, 
+                                    (struct sockaddr *)&client_addr, client_addr_len);
+        if (sent_bytes != sizeof(ack)) {
+            printf("Failed to send ACK\n");
+            fclose(file_stream);
+            return 1;
+        }
+        // do the same for the remaining packets
+        for(int i = 1; i < total_frags; i++){
+            memset(buffer, 0, BUFFER_SIZE);
+            memset(packet.filedata, 0, sizeof(packet.filedata));
+            packet_len = recvfrom(server_socket, buffer, BUFFER_SIZE,
+                        0, (struct sockaddr*)&client_addr, &client_addr_len);
+            if (packet_len == -1) {
+                perror("recvfrom failed");
+                // Handle error such as by exiting or attempting to receive again
+                close(server_socket);
+                return 1;
+            }
+            parse_result = parse_packet(buffer, packet_len, &packet);
+            // Check the result of parse_packet
+            if (parse_result == -1) {
+                fprintf(stderr, "Failed to parse the packet\n");
+                // Handle parsing error, potentially by cleaning up and exiting
+                close(server_socket);
+                return 1;
+            }
+            current_packet = packet.frag_no;
+            size_t bytes_written = fwrite(packet.filedata, sizeof(char), packet.size, file_stream);
+            if (bytes_written < packet.size) {
+                fprintf(stderr, "Failed to write all data to the file\n");
+                fclose(file_stream); // Close the file stream to flush and release the file
+                free(packet.filename); // Don't forget to free dynamically allocated memory
+                close(server_socket);
+                return 1;
+            }
+            free(packet.filename);
+            // send ack for i'th packet
+            ack.ack_frag_no = htonl(current_packet);
+            sent_bytes = sendto(server_socket, &ack, sizeof(ack), 0, 
+                                    (struct sockaddr *)&client_addr, client_addr_len);
+            if (sent_bytes != sizeof(ack)) {
+                printf("Failed to send ACK\n");
+                fclose(file_stream);
+                return 1;
+            }
+        }
+        // close file stream
+        fclose(file_stream);
     }
     close(server_socket);
     return 0;
