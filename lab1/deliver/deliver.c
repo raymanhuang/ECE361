@@ -137,8 +137,7 @@ int main(int argc, char *argv[]) {
 
         packets[i].filename = strdup(filename);
         if (packets[i].filename == NULL) {
-            fprintf(stderr, "Failed to allocate memory for packets[%d].filename\n", i);
-            // Handle the error, such as cleaning up already allocated resources
+            printf("Failed to allocate memory for packets[%d].filename\n", i);
             return 1;
         }
         printf("Allocated filename for packet[%d]: '%s'\n", i, packets[i].filename);
@@ -154,7 +153,6 @@ int main(int argc, char *argv[]) {
         memcpy(packets[i].filedata, file_contents + (i * 1000), packets[i].size);
         printf("memcpy completed for packet[%d]\n", i);
 
-        // It's good to also check the copied data
         printf("Data copied for packet[%d]: ", i);
         for (unsigned int j = 0; j < packets[i].size; j++) {
             printf("%02X ", packets[i].filedata[j]);
@@ -162,6 +160,7 @@ int main(int argc, char *argv[]) {
         printf("\n");
     }
     printf("Exited packet processing loop\n");
+    
     // File exists, proceed with sending file to the server
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {

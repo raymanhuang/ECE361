@@ -26,7 +26,6 @@ int parse_packet(const char *buffer, ssize_t buffer_len, Packet *packet) {
     char filename[FILENAME_MAX]; // Temporary buffer for the filename
 
     // Parse the header
-    // The format %[^:] tells sscanf to read until the next colon
     int scanned = sscanf(buffer, "%u:%u:%u:%[^:]:", &total_frag, &frag_no, &size, filename);
     if (scanned != 4) { // Ensure that exactly four items were scanned
         fprintf(stderr, "Failed to parse packet header\n");
@@ -114,7 +113,7 @@ int main(int argc, char* argv[]){
 
         // Check the result of parse_packet
         if (parse_result == -1) {
-            fprintf(stderr, "Failed to parse the packet\n");
+            printf("Failed to parse the packet\n");
             // Handle parsing error, potentially by cleaning up and exiting
             close(server_socket);
             return 1;
@@ -173,21 +172,19 @@ int main(int argc, char* argv[]){
         }
         // do the same for the remaining packets
         for(int i = 1; i < total_frags; i++){
-            printf("entered for loop\n");
             memset(buffer, 0, BUFFER_SIZE);
             memset(packet.filedata, 0, sizeof(packet.filedata));
             packet_len = recvfrom(server_socket, buffer, BUFFER_SIZE,
                         0, (struct sockaddr*)&client_addr, &client_addr_len);
             if (packet_len == -1) {
                 perror("recvfrom failed");
-                // Handle error such as by exiting or attempting to receive again
                 close(server_socket);
                 return 1;
             }
             parse_result = parse_packet(buffer, packet_len, &packet);
             // Check the result of parse_packet
             if (parse_result == -1) {
-                fprintf(stderr, "Failed to parse the packet\n");
+                printf("Failed to parse the packet\n");
                 // Handle parsing error, potentially by cleaning up and exiting
                 close(server_socket);
                 return 1;
@@ -195,9 +192,9 @@ int main(int argc, char* argv[]){
             current_packet = packet.frag_no;
             size_t bytes_written = fwrite(packet.filedata, sizeof(char), packet.size, file_stream);
             if (bytes_written < packet.size) {
-                fprintf(stderr, "Failed to write all data to the file\n");
+                printf("Failed to write all data to the file\n");
                 fclose(file_stream); // Close the file stream to flush and release the file
-                free(packet.filename); // Don't forget to free dynamically allocated memory
+                free(packet.filename); 
                 close(server_socket);
                 return 1;
             }
