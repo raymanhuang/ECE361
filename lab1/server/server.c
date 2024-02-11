@@ -34,12 +34,10 @@ int parse_packet(const char *buffer, ssize_t buffer_len, Packet *packet) {
     }
 
     // Calculate the length of the header to find the start of the file data
-    // This includes the lengths of the numeric fields as strings and the colons, plus the filename and its null terminator
-    size_t filename_length = strlen(filename);
-    size_t header_length = 3 * (sizeof(unsigned int) + 1) + filename_length + 1; // 3 * sizeof(unsigned int) for the three integers and their colons, +1 for the colon after the filename
+    size_t header_length = snprintf(NULL, 0, "%u:%u:%u:%s:", total_frag, frag_no, size, filename);
 
     // Ensure we don't read past the buffer
-    if (header_length >= buffer_len || header_length + size > buffer_len) {
+    if (header_length >= (size_t)buffer_len || header_length + size > (size_t)buffer_len) {
         fprintf(stderr, "Packet data exceeds buffer length\n");
         return -1;
     }
@@ -98,6 +96,7 @@ int main(int argc, char* argv[]){
 
     while(1){
             // receive the first packet
+        memset(buffer, 0, BUFFER_SIZE);
         packet_len = recvfrom(server_socket, buffer, BUFFER_SIZE,
                         0, (struct sockaddr*)&client_addr, &client_addr_len);
         if (packet_len == -1) {
@@ -107,9 +106,11 @@ int main(int argc, char* argv[]){
             return 1;
         }
 
+        printf("packet_len = %d\n", packet_len);
+
         Packet packet;
         // Parse the received data into your Packet struct
-        int parse_result = parse_packet(buffer, packet_len, &packet);
+        int parse_result = parse_packet(buffer, BUFFER_SIZE, &packet);
 
         // Check the result of parse_packet
         if (parse_result == -1) {
@@ -119,6 +120,20 @@ int main(int argc, char* argv[]){
             return 1;
         }
 
+        // Print the non-binary parts of the packet
+        printf("Packet total fragments: %u\n", packet.total_frag);
+        printf("Packet fragment number: %u\n", packet.frag_no);
+        printf("Packet size: %u\n", packet.size);
+        printf("Packet filename: %s\n", packet.filename);
+
+        // Print the binary data in hexadecimal
+        printf("Packet filedata:\n");
+        for (unsigned int i = 0; i < packet.size; i++) {
+            // Print each byte as a two-digit hexadecimal number
+            printf("%02X ", (unsigned char)packet.filedata[i]);
+        }
+        printf("\n");   
+
         // create the file and write the first packets data
         unsigned int current_packet = 0;
         int total_frags = packet.total_frag;
@@ -126,6 +141,7 @@ int main(int argc, char* argv[]){
         if(packet.frag_no == 0){
             file_stream = fopen(packet.filename, "wb");
             if (file_stream == NULL) {
+                printf("im in here 1\n");
                 perror("Error opening file to write");
                 free(packet.filename); 
                 close(server_socket);
@@ -133,6 +149,7 @@ int main(int argc, char* argv[]){
             }
             size_t bytes_written = fwrite(packet.filedata, sizeof(char), packet.size, file_stream);
             if (bytes_written < packet.size) {
+                printf("im in here 2\n");
                 fprintf(stderr, "Failed to write all data to the file\n");
                 fclose(file_stream); // Close the file stream to flush and release the file
                 free(packet.filename); // Don't forget to free dynamically allocated memory
@@ -143,7 +160,6 @@ int main(int argc, char* argv[]){
                 free(packet.filename);
                 fclose(file_stream);
             }
-            free(packet.filename);
         }
         // Send ACK for packet 0
         AckPacket ack;
@@ -157,6 +173,7 @@ int main(int argc, char* argv[]){
         }
         // do the same for the remaining packets
         for(int i = 1; i < total_frags; i++){
+            printf("entered for loop\n");
             memset(buffer, 0, BUFFER_SIZE);
             memset(packet.filedata, 0, sizeof(packet.filedata));
             packet_len = recvfrom(server_socket, buffer, BUFFER_SIZE,

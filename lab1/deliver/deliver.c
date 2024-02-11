@@ -23,30 +23,41 @@ typedef struct ack_packet {
     unsigned int ack_frag_no;
 } AckPacket;
 
-char* serialize_packet(const Packet* pkt){
-    size_t file_name_length = strlen(pkt->filename);
+char* serialize_packet(const Packet* pkt, size_t* out_size, size_t* out_header_length) {
+    // Calculate the length needed for the header
     size_t header_length = snprintf(NULL, 0, "%u:%u:%u:%s:", pkt->total_frag, pkt->frag_no, pkt->size, pkt->filename);
+    
+    // Calculate the total size needed: header + data
     size_t packet_size = header_length + pkt->size;
 
-    char* buffer = malloc(packet_size); 
+    // Allocate memory for the serialized packet
+    char* buffer = malloc(packet_size + 1); // +1 for the null terminator, if needed
     if (!buffer) {
         perror("Failed to allocate memory for packet serialization");
         return NULL;
     }
 
-    int header_size = snprintf(buffer, header_length + 1, "%u:%u:%u:%s:", pkt->total_frag, pkt->frag_no, pkt->size, pkt->filename);
-
-    if (header_size != header_length) {
+    // Write the header into the buffer
+    int header_written = snprintf(buffer, header_length + 1, "%u:%u:%u:%s:", pkt->total_frag, pkt->frag_no, pkt->size, pkt->filename);
+    if (header_written < 0 || (size_t)header_written != header_length) {
         free(buffer);
         return NULL;
     }
 
+    // Copy the file data directly after the header
     memcpy(buffer + header_length, pkt->filedata, pkt->size);
 
+    // Set the output size for the caller to know how many bytes to send
+    *out_size = packet_size;
 
+    // Also return the header length
+    *out_header_length = header_length;
+
+    // Return the serialized packet buffer
     return buffer;
-
 }
+
+
 
 int main(int argc, char *argv[]) {
     // Checking the length of the arguement
@@ -82,7 +93,7 @@ int main(int argc, char *argv[]) {
         perror("Failed to open file");
         return 1;
     }
-    unsigned char* file_contents = malloc(file_stat.st_size);
+    unsigned char* file_contents = malloc(file_stat.st_size * sizeof(unsigned char));
     if (!file_contents) {
         perror("Memory allocation failed");
         fclose(file);
@@ -111,19 +122,46 @@ int main(int argc, char *argv[]) {
     }
     printf("\n");
 
+    printf("Allocating memory for %u fragments\n", total_fragments);
     Packet* packets = malloc(total_fragments * sizeof(Packet));
-    
-    for(int i = 0; i < total_fragments; i++){
+    printf("made it here 1\n");
+    if (packets == NULL) {
+        perror("Failed to allocate memory for packets");
+        return 1; // Or handle the error as appropriate
+    }
+    for (int i = 0; i < total_fragments; i++) {
+        printf("i = %d\n", i);
         packets[i].total_frag = total_fragments;
         packets[i].frag_no = i;
+        printf("Set total_frag and frag_no for packet[%d]\n", i);
+
         packets[i].filename = strdup(filename);
-        if(i < total_fragments - 1 || file_stat.st_size % 1000 == 0){
+        if (packets[i].filename == NULL) {
+            fprintf(stderr, "Failed to allocate memory for packets[%d].filename\n", i);
+            // Handle the error, such as cleaning up already allocated resources
+            return 1;
+        }
+        printf("Allocated filename for packet[%d]: '%s'\n", i, packets[i].filename);
+
+        if (i < total_fragments - 1 || file_stat.st_size % 1000 == 0) {
             packets[i].size = 1000;
         } else {
             packets[i].size = file_stat.st_size % 1000; // Last fragment size
         }
+        printf("Packet[%d] size set to: %u\n", i, packets[i].size);
+
+        printf("Attempting to copy data to packet[%d].filedata, size: %u\n", i, packets[i].size);
         memcpy(packets[i].filedata, file_contents + (i * 1000), packets[i].size);
+        printf("memcpy completed for packet[%d]\n", i);
+
+        // It's good to also check the copied data
+        printf("Data copied for packet[%d]: ", i);
+        for (unsigned int j = 0; j < packets[i].size; j++) {
+            printf("%02X ", packets[i].filedata[j]);
+        }
+        printf("\n");
     }
+    printf("Exited packet processing loop\n");
     // File exists, proceed with sending file to the server
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
@@ -140,26 +178,30 @@ int main(int argc, char *argv[]) {
         perror("Invalid server address");
         return 1;
     }
-
     // Step 3: Send the file to the server
 
     for(int i = 0; i < total_fragments; i++) {
+        printf("i = %d\n", i);
         // Serialize the packet into a correctly formatted string.
-        char *serialized_packet = serialize_packet(&packets[i]);
+        size_t serialized_size = 0;
+        size_t header_length = 0;
+        char *serialized_packet = serialize_packet(&packets[i], &serialized_size, &header_length);
+   
+        
         if (!serialized_packet) {
             perror("Failed to serialize packet");
             return 1;
         }
+        printf("Serialized packet header: %.*s\n", (int)header_length, serialized_packet);
 
-        // Calculate the size of the packet
-        size_t packet_size = strlen(packets[i].total_frag) + 1
-                         + strlen(packets[i].frag_no) + 1
-                         + strlen(packets[i].size) + 1
-                         + strlen(packets[i].filename) + 1
-                         + packets[i].size;
+        printf("Serialized packet binary data:\n");
+        for (size_t i = header_length; i < serialized_size; ++i) {
+            printf("%02X ", (unsigned char)serialized_packet[i]);
+            }
+        printf("\n");
 
         // Send the packet
-        if (sendto(sockfd, serialized_packet, packet_size, 0, 
+        if (sendto(sockfd, serialized_packet, serialized_size, 0, 
                 (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
             perror("sendto failed");
             free(serialized_packet);
@@ -178,6 +220,7 @@ int main(int argc, char *argv[]) {
         AckPacket ack;
         struct sockaddr_in from_addr;
         socklen_t from_len = sizeof(from_addr);
+        printf("waiting for ack...\n");
         ssize_t ack_len = recvfrom(sockfd, &ack, sizeof(ack), 0, 
                                     (struct sockaddr*)&from_addr, &from_len);
         if (ack_len < 0){
@@ -190,7 +233,7 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
-
+    printf("made it out");
     // Step 4: clean up 
     for(int i = 0; i < total_fragments; i++){
         free(packets[i].filename);
