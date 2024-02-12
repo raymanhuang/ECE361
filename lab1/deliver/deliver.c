@@ -57,6 +57,14 @@ char* serialize_packet(const Packet* pkt, size_t* out_size, size_t* out_header_l
     return buffer;
 }
 
+unsigned int find_total_frags(off_t file_size, int max_packet_size){
+    if (file_size % max_packet_size == 0){
+        return file_size / max_packet_size;
+    }
+    else {
+        return file_size / max_packet_size + 1;
+    }
+}
 
 
 int main(int argc, char *argv[]) {
@@ -100,7 +108,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }  
     
-    unsigned int total_fragments = ceil(file_stat.st_size / 1000.0);
+    unsigned int total_fragments = find_total_frags(file_stat.st_size, 1000);
     printf("file size: %u\n", total_fragments);
 
     size_t bytes_read = fread(file_contents, sizeof(unsigned char), file_stat.st_size, file);
@@ -160,7 +168,7 @@ int main(int argc, char *argv[]) {
         printf("\n");
     }
     printf("Exited packet processing loop\n");
-    
+
     // File exists, proceed with sending file to the server
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
