@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <time.h>
 #include <netinet/in.h>
 #include <stdlib.h>  // For atoi
 #include <unistd.h>  // For close
@@ -63,7 +64,7 @@ int parse_packet(const char *buffer, ssize_t buffer_len, Packet *packet) {
 
 
 int main(int argc, char* argv[]){
-
+    srand(time(NULL)); 
     if (argc != 2) {
         printf("Usage: %s <UDP listen port>\n", argv[0]);
         return 1;
@@ -105,6 +106,7 @@ int main(int argc, char* argv[]){
             return 1;
         }
 
+
         printf("packet_len = %d\n", packet_len);
 
         Packet packet;
@@ -125,12 +127,12 @@ int main(int argc, char* argv[]){
         printf("Packet filename: %s\n", packet.filename);
 
         // Print the binary data in hexadecimal
-        printf("Packet filedata:\n");
-        for (unsigned int i = 0; i < packet.size; i++) {
-            // Print each byte as a two-digit hexadecimal number
-            printf("%02X ", (unsigned char)packet.filedata[i]);
-        }
-        printf("\n");   
+        // printf("Packet filedata:\n");
+        // for (unsigned int i = 0; i < packet.size; i++) {
+        //     // Print each byte as a two-digit hexadecimal number
+        //     printf("%02X ", (unsigned char)packet.filedata[i]);
+        // }
+        // printf("\n");   
 
         // create the file and write the first packets data
         unsigned int current_packet = 0;
@@ -180,6 +182,14 @@ int main(int argc, char* argv[]){
                 close(server_socket);
                 return 1;
             }
+
+            // Simulate packet loss: 1% chance to drop the packet
+            if ((rand() % 100) < 5) {  // Adjust the 5 to change the drop rate
+                printf("Simulating packet drop (not sending ACK for packet %d)\n", current_packet);
+                i--;  // Stay on the same packet number, waiting for retransmission
+                continue;  // Skip sending ACK for this packet
+            }
+
             parse_result = parse_packet(buffer, packet_len, &packet);
             // Check the result of parse_packet
             if (parse_result == -1) {
