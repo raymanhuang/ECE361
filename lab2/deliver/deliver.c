@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <math.h>
 #include <time.h>
+#include <stdbool.h>
+#include <sys/time.h>
 
 #define BUFFER_SIZE 1024
 
@@ -126,11 +128,6 @@ int main(int argc, char *argv[]) {
     }
     fclose(file);
 
-    for(size_t i = 0; i < file_stat.st_size; i++) {
-    printf("%c", file_contents[i]); // Print each byte in hex format
-    }
-    printf("\n");
-
     printf("Allocating memory for %u fragments\n", total_fragments);
     Packet* packets = malloc(total_fragments * sizeof(Packet));
     if (packets == NULL) {
@@ -187,6 +184,14 @@ int main(int argc, char *argv[]) {
     }
     // Step 3: Send the file to the server
 
+    struct timeval start, end, tv;
+    double t1 = 2.0; // Start with an initial timeout value, e.g., 2 seconds
+
+    fd_set readfds;
+    socklen_t from_len = sizeof(struct sockaddr_in);
+    struct sockaddr_in from_addr;
+    AckPacket ack;
+
     clock_t start_time, end_time;
     for(int i = 0; i < total_fragments; i++) {
         // printf("i = %d\n", i);
@@ -200,54 +205,56 @@ int main(int argc, char *argv[]) {
             perror("Failed to serialize packet");
             return 1;
         }
-        // printf("Serialized packet header: %.*s\n", (int)header_length, serialized_packet);
 
-        // printf("Serialized packet binary data:\n");
-        // for (size_t i = header_length; i < serialized_size; ++i) {
-        //     printf("%02X ", (unsigned char)serialized_packet[i]);
-        //     }
-        // printf("\n");
+        bool ack_received = false;
 
-        // Send the packet
-        if(i == 0){
-            start_time = clock();
-        }
-        if (sendto(sockfd, serialized_packet, serialized_size, 0, 
+        while (!ack_received) {
+            if (sendto(sockfd, serialized_packet, serialized_size, 0, 
                 (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-            perror("sendto failed");
-            free(serialized_packet);
-            for(int j = 0; j <= i; j++){
-                free(packets[j].filename);
-            }
-            free(packets);
-            free(file_contents);
-            close(sockfd);
-            return 1;
+                perror("sendto failed");
+                free(serialized_packet);
+                for(int j = 0; j <= i; j++){
+                    free(packets[j].filename);
+                }
+                free(packets);
+                free(file_contents);
+                close(sockfd);
+                return 1;
+                }
+
+            // Record the send time
+            gettimeofday(&start, NULL);
+
+            // Prepare for select
+            FD_ZERO(&readfds);
+            FD_SET(sockfd, &readfds);
+            tv.tv_sec = (int)t1;
+            tv.tv_usec = (t1 - (int)t1) * 1000000;
+
+            int retval = select(sockfd + 1, &readfds, NULL, NULL, &tv);
+            if (retval == -1) {
+                perror("select error");
+                // ... [Error handling code]
+            } else if (retval > 0) {
+                // ACK received
+                ssize_t ack_len = recvfrom(sockfd, &ack, sizeof(ack), 0, (struct sockaddr*)&from_addr, &from_len);
+                if (ack_len > 0 && ntohl(ack.ack_frag_no) == packets[i].frag_no) {
+                    // Calculate RTT
+                    gettimeofday(&end, NULL);
+                    double rtt = (end.tv_sec - start.tv_sec) * 1000.0;
+                    rtt += (end.tv_usec - start.tv_usec) / 1000.0; // Convert to milliseconds
+                    t1 = rtt * 2.0; // Set t1 to RTT for next packet, converted to seconds
+                    ack_received = true;
+                }
+            } else {
+                printf("Timeout occurred, resending packet %d\n", i);
+                // Timeout logic (you could potentially increase t1 here, or leave it as the last RTT)
+                // t1 = t1; // Keep the same timeout for simplicity, or adjust as needed
+        }
+
         }
         // Free the serialized packet after sending
         free(serialized_packet);
-
-        // Wait for ACK
-        AckPacket ack;
-        struct sockaddr_in from_addr;
-        socklen_t from_len = sizeof(from_addr);
-        // printf("waiting for ack...\n");
-        ssize_t ack_len = recvfrom(sockfd, &ack, sizeof(ack), 0, 
-                                    (struct sockaddr*)&from_addr, &from_len);
-        if(i == 0){
-            end_time = clock();
-            clock_t RTT = end_time - start_time;
-            printf("THE RTT IS: %ld ms\n", RTT);
-        }
-        if (ack_len < 0){
-            perror("recvfrom failed");
-            break;
-        } else if (ack_len == sizeof(ack) && ntohl(ack.ack_frag_no) == packets[i].frag_no){
-            // printf("ACK received for fragment %u\n", packets[i].frag_no);
-        } else {
-            printf("Invalid ACK\n");
-            break;
-        }
     }
     printf("made it out\n");
     // Step 4: clean up 
