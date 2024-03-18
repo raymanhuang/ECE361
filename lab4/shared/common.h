@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <signal.h>
 
 typedef struct message {
     unsigned int type;

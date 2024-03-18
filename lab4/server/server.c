@@ -46,9 +46,10 @@ void* client_connection(void *arg){
     while(1){
         message msg;
         receive_message(client_sockfd, &msg);
+        printf("RECEIVED MSG FROM CLIENT %s\n", msg.source);
         if(msg.type == LOGIN){
             printf("received login msg\n");
-            printf("from: %s\n", msg.source);
+            printf("from: %s with client_sockfd: %d\n", msg.source, client_sockfd);
             printf("password: %s\n", msg.data);
             if(check_if_user_exists(msg.source, msg.data) == false){
                 message login_failed;
@@ -67,24 +68,26 @@ void* client_connection(void *arg){
                 send_message(client_sockfd, &login_failed);
             }
             else {
-                message login_success;
-                login_success.type = LO_ACK;
-                login_success.size = strlen("Login successful!");
-                strcpy((char*)login_success.source, "server");
-                strcpy((char*)login_success.data, "Login successful!");
-                send_message(client_sockfd, &login_success);
-
                 ConnectedUser new_client;
                 new_client.in_session = false;
                 strcpy(new_client.ip, client_ip);
                 new_client.port = port;
                 printf("%s, %d\n", new_client.ip, new_client.port);
                 strcpy((char*)new_client.user.username, msg.source);
+                //printf("made it here 1\n");
                 strcpy((char*)new_client.user.password, msg.data);
+                //printf("made it here 2\n");
                 new_client.sockfd = client_sockfd;
                 add_connected_client(&new_client);
-                // printf("Added %s\n", head->client.user.username);
+                //printf("Added %s\n", head->client.user.username);
                 print_connected_clients();
+
+                message login_success;
+                login_success.type = LO_ACK;
+                login_success.size = strlen("Login successful!");
+                strcpy((char*)login_success.source, "server");
+                strcpy((char*)login_success.data, "Login successful!");
+                send_message(client_sockfd, &login_success);
             }
         } else if (msg.type == JOIN){
             if(is_client_already_in_a_session(msg.source) == true){
@@ -163,6 +166,7 @@ void* client_connection(void *arg){
             send_message(client_sockfd, &logout_ack);
             remove_client_from_list(msg.source);
             print_connected_clients();
+            printf("closing: %s, client_sockfd: %d\n", msg.source, client_sockfd);
             close(client_sockfd);
             break;
         }
@@ -241,11 +245,13 @@ int main(int argc, char* argv[]){
 }
 
 void add_connected_client(ConnectedUser* new_client){
-    pthread_mutex_lock(&mutex);
+    printf("entered\n");
+    //pthread_mutex_lock(&mutex);
     ClientNode *new_node = (ClientNode *)malloc(sizeof(ClientNode));
+    printf("exiting 1\n");
     if (new_node == NULL) {
         perror("Failed to allocate memory for new client node");
-        pthread_mutex_unlock(&mutex); // Unlock the mutex before returning
+        // pthread_mutex_unlock(&mutex); // Unlock the mutex before returning
         return;
     }
     // Copy the client data to the new node
@@ -253,11 +259,13 @@ void add_connected_client(ConnectedUser* new_client){
     new_node->next = head; // Insert the new node at the beginning of the list
     head = new_node; // Update the head of the list
 
-    pthread_mutex_unlock(&mutex); // Unlock the mutex
+    //pthread_mutex_unlock(&mutex); // Unlock the mutex
+    printf("finished adding %s\n", head->client.user.username);
+    return;
 }
 
 void print_connected_clients(){
-    pthread_mutex_lock(&mutex);
+    //pthread_mutex_lock(&mutex);
     ClientNode* current;
     if (head == NULL){
         printf("No connected clients\n");
@@ -282,7 +290,7 @@ void print_connected_clients(){
         current = current->next;
     }
     // printf("exited while loop\n");
-    pthread_mutex_unlock(&mutex);
+    //pthread_mutex_unlock(&mutex);
     return;
 }
 
@@ -330,7 +338,7 @@ bool is_client_already_in_a_session(char* username){
 }
 
 void update_client_session(char* username, char* session_id, bool in_session){
-    pthread_mutex_lock(&mutex);
+    //pthread_mutex_lock(&mutex);
     ClientNode* current;
     if (head == NULL){
         pthread_mutex_unlock(&mutex); 
@@ -349,7 +357,7 @@ void update_client_session(char* username, char* session_id, bool in_session){
         current = current->next;
     }
     printf("node not found\n"); 
-    pthread_mutex_unlock(&mutex); 
+    //pthread_mutex_unlock(&mutex); 
     return;
 }
 
@@ -411,7 +419,7 @@ void broadcast_message_to_all_but_sender(char* session_id, char* text_message, c
 }
 
 void remove_client_from_list(char* userid){
-    pthread_mutex_lock(&mutex);
+    //pthread_mutex_lock(&mutex);
     ClientNode* current = head;
     ClientNode *prev = NULL;
 
@@ -427,14 +435,14 @@ void remove_client_from_list(char* userid){
                 prev->next = current->next;
             }
             free(current); // Free the memory allocated for the removed node
-            pthread_mutex_unlock(&mutex);
+            // pthread_mutex_unlock(&mutex);
             return; // Node removed, exit the function
         }
         // Move to the next node in the list
         prev = current;
         current = current->next;
     }
-    pthread_mutex_unlock(&mutex);
+    //pthread_mutex_unlock(&mutex);
 }
 
 char* build_query_list(ClientNode *head){
