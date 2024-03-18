@@ -1,0 +1,38 @@
+# Object files
+*.o
+
+# Libraries
+*.a
+*.lib
+
+# Executable files
+client
+server
+
+# Debug files
+*.dSYM/
+
+# Build files
+*.out
+
+# Dependency directories
+deps/
+
+# Editor directories and files
+.vscode/
+*~
+*.swp
+
+# Log files and databases
+*.log
+*.sql
+*.sqlite
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
