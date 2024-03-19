@@ -250,7 +250,13 @@ Command handleCommand(char** args) {
                 token = strtok(NULL, " ");
             }
             args[i] = NULL;
-            if (strcmp(args[0], "/login") == 0) { // done
+
+            // Check for the /login command and ensure it has exactly 4 arguments (5 tokens in total)
+            if (strcmp(args[0], "/login") == 0) {
+                if (i != 5) { // Including the command itself, there should be 5 tokens
+                    printf("Error: /login requires 4 arguments (username, password, server_ip, server_port).\n");
+                    return INVALID_COMMAND;
+                }
                 return LOG_IN;
             } else if (strcmp(args[0], "/logout") == 0) { // done
                 return LOGOUT;
