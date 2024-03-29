@@ -28,6 +28,7 @@ void add_connected_client(ConnectedUser* new_client);
 void print_connected_clients();
 bool is_client_already_connected(char* username);
 bool check_if_user_exists(char* username, char* password);
+ClientNode* find_client_by_username(char* username);
 void update_client_session(char* username, char* session_id, bool in_session);
 bool is_client_already_in_a_session(char* username);
 bool session_exists(char* session_id);

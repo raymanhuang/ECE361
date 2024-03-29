@@ -152,6 +152,43 @@ void* client_connection(void *arg){
                 // send message to all clients with matching session ID
                 broadcast_message_to_all_but_sender(get_session_id(msg.source), msg.data, msg.source);
             }
+        } else if (msg.type == PRIVATE_MSG) {
+            // getting the recipients name
+            char recipient[MAX_NAME];
+            char* messageContent = strchr((char*)msg.data, ':');
+            
+            if (messageContent) {
+                *messageContent = '\0'; // replacing : with \0 to end the recipients username string
+                strcpy(recipient, (char*)msg.data);
+                messageContent++; 
+
+                // finding the client and forwarding the msg to that client
+                ClientNode* target = find_client_by_username(recipient);
+                if (target) {
+                    message forwardMsg;
+                    forwardMsg.type = PRIVATE_MSG;
+                    snprintf((char*)forwardMsg.data, MAX_DATA, "%s:%s", msg.source, messageContent);
+                    forwardMsg.size = strlen((char*)forwardMsg.data);
+                    strcpy((char*)forwardMsg.source, msg.source);
+                    send_message(target->client.sockfd, &forwardMsg);
+                // if the recipient was not found, alert the sender
+                } else {
+                    message feedbackMsg;
+                    feedbackMsg.type = MSG_NAK; 
+                    snprintf((char*)feedbackMsg.data, MAX_DATA, "'%s' not found or not connected", recipient);
+                    feedbackMsg.size = strlen((char*)feedbackMsg.data);
+                    strcpy((char*)feedbackMsg.source, "server");
+                    send_message(client_sockfd, &feedbackMsg);
+                }
+            // invalid formatting, alert the sender
+            } else {
+                message feedbackMsg;
+                feedbackMsg.type = MSG_NAK; 
+                strcpy((char*)feedbackMsg.data, "Invalid format, your private message was not delivered");
+                feedbackMsg.size = strlen((char*)feedbackMsg.data);
+                strcpy((char*)feedbackMsg.source, "server");
+                send_message(client_sockfd, &feedbackMsg); 
+            }
         } else if (msg.type == LEAVE_SESS){
             printf("leave request from %s\n", msg.source);
             update_client_session(msg.source, "", false);
@@ -316,6 +353,17 @@ bool check_if_user_exists(char* username, char* password){
         }
     }
     return false;
+}
+
+ClientNode* find_client_by_username(char* username) {
+    ClientNode* current = head;
+    while (current != NULL) {
+        if (strcmp(current->client.user.username, username) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
 }
 
 bool is_client_already_in_a_session(char* username){

@@ -43,6 +43,7 @@ typedef enum {
     NS_ACK,
     NS_NAK,
     MESSAGE,
+    PRIVATE_MSG,
     QUERY,
     QU_ACK,
     MSG_NAK,
