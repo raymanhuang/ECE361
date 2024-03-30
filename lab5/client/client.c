@@ -22,7 +22,15 @@ void *listen_for_server_messages(void *arg) {
             printf("%s\n", msg.data);
             g.logged_in = true;
         } 
+        else if (msg.type == REG_ACK){
+            printf("%s\n", msg.data);
+            g.logged_in = true;
+        }
         else if (msg.type == LO_NAK){
+            printf("%s\n", msg.data);
+            return NULL;
+        }
+        else if (msg.type == REG_NAK){
             printf("%s\n", msg.data);
             return NULL;
         }
@@ -74,8 +82,17 @@ void handle_sigint(int sig) {
         g.running = false; // Stop the main loop
         g.logged_in = 0; // Mark as logged out
         close(g.sockfd); // Close the connection
+        exit(0);
     }
-    
+    message exit_message;
+    exit_message.type = EXIT;
+    exit_message.size = strlen("exiting");
+    strcpy((char*)exit_message.source, "stub");
+    strcpy((char*)exit_message.data, "exiting");
+    send_message(g.sockfd, &exit_message);
+    g.running = false; // Stop the main loop
+    g.logged_in = 0; // Mark as logged out
+    close(g.sockfd); // Close the connection
     exit(0); // Exit the application
 }
 
@@ -133,6 +150,44 @@ int main(int argc, char **argv) {
             strcpy(g.client_name, args[1]);
             strcpy((char*)login_msg.data, args[2]);
             send_message(g.sockfd, &login_msg);
+        }
+        else if(command == REGISTER){
+            printf("made it here\n");
+            if(g.logged_in == true){
+                printf("Please log out first!\n");
+            } else {
+                // Connect to server
+                struct sockaddr_in server_addr;
+                g.sockfd = socket(AF_INET, SOCK_STREAM, 0);
+                // thread_args.sockfd = sockfd;
+                if(g.sockfd < 0){
+                    perror("Socket creation failed");
+                    exit(EXIT_FAILURE);
+                }
+                memset(&server_addr, 0, sizeof(server_addr));
+                server_addr.sin_family = AF_INET;
+                server_addr.sin_port = htons(atoi(args[4])); // Server port number
+                server_addr.sin_addr.s_addr = inet_addr(args[3]); // Server IP address
+
+                if (connect(g.sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+                    perror("Connection failed");
+                    exit(EXIT_FAILURE);
+                }            
+                // Create thread
+                pthread_t server_thread;
+                if(pthread_create(&server_thread, NULL, listen_for_server_messages, NULL)){
+                    perror("Failed to create thread");
+                    exit(EXIT_FAILURE);
+                }
+                // Send a message to the server with login info
+                message register_msg;
+                register_msg.type = REG;
+                register_msg.size = strlen(args[2]);
+                strcpy((char*)register_msg.source, args[1]);
+                strcpy(g.client_name, args[1]); // username
+                strcpy((char*)register_msg.data, args[2]); // password
+                send_message(g.sockfd, &register_msg);
+            }
         }
         else if(command == CREATE_SESSION){
             if(g.logged_in == false){
@@ -270,7 +325,14 @@ Command handleCommand(char** args) {
                 return LIST;
             } else if (strcmp(args[0], "/quit") == 0) { // done
                 return QUIT;
-            } else {        // done
+            } else if (strcmp(args[0], "/register") == 0){
+                if (i != 5) { // Including the command itself, there should be 5 tokens
+                    printf("Error: /register requires 4 arguments (username, password, server_ip, server_port).\n");
+                    return INVALID_COMMAND;
+                }
+                return REGISTER;
+            }
+             else {        // done
                 return INVALID_COMMAND;
             }
         } else { // done

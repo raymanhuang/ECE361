@@ -74,8 +74,17 @@ void handle_sigint(int sig) {
         g.running = false; // Stop the main loop
         g.logged_in = 0; // Mark as logged out
         close(g.sockfd); // Close the connection
+        exit(0);
     }
-    
+    message exit_message;
+    exit_message.type = EXIT;
+    exit_message.size = strlen("exiting");
+    strcpy((char*)exit_message.source, "stub");
+    strcpy((char*)exit_message.data, "exiting");
+    send_message(g.sockfd, &exit_message);
+    g.running = false; // Stop the main loop
+    g.logged_in = 0; // Mark as logged out
+    close(g.sockfd); // Close the connection
     exit(0); // Exit the application
 }
 
@@ -281,4 +290,3 @@ Command handleCommand(char** args) {
     }
     return INVALID_COMMAND; 
 }
-

@@ -158,12 +158,12 @@ void* client_connection(void *arg){
             print_connected_clients();
         } else if (msg.type == EXIT){
             // remove client from list
-            message logout_ack;
-            logout_ack.type = LGO_ACK;
-            logout_ack.size = strlen("logout_ack");
-            strcpy((char*)logout_ack.source, "server");
-            strcpy((char*)logout_ack.data, "logout_ack");
-            send_message(client_sockfd, &logout_ack);
+            // message logout_ack;
+            // logout_ack.type = LGO_ACK;
+            // logout_ack.size = strlen("logout_ack");
+            // strcpy((char*)logout_ack.source, "server");
+            // strcpy((char*)logout_ack.data, "logout_ack");
+            // send_message(client_sockfd, &logout_ack);
             remove_client_from_list(msg.source);
             print_connected_clients();
             printf("closing: %s, client_sockfd: %d\n", msg.source, client_sockfd);

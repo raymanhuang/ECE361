@@ -46,7 +46,10 @@ typedef enum {
     QUERY,
     QU_ACK,
     MSG_NAK,
-    LGO_ACK
+    LGO_ACK,
+    REG,
+    REG_NAK,
+    REG_ACK
 } type;
 
 void serialize_message_with_header(const message *msg, unsigned char *buffer);

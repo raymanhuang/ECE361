@@ -15,7 +15,8 @@ typedef enum {
     CREATE_SESSION,
     LIST,
     QUIT,
-    TEXT
+    TEXT,
+    REGISTER
 } Command;
 
 void displayPrompt();

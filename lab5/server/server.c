@@ -51,7 +51,7 @@ void* client_connection(void *arg){
             printf("received login msg\n");
             printf("from: %s with client_sockfd: %d\n", msg.source, client_sockfd);
             printf("password: %s\n", msg.data);
-            if(check_if_user_exists(msg.source, msg.data) == false){
+            if(check_credentials(msg.source, msg.data) == false){
                 message login_failed;
                 login_failed.type = LO_NAK;
                 login_failed.size = strlen("Login failed, User not found!");
@@ -74,12 +74,9 @@ void* client_connection(void *arg){
                 new_client.port = port;
                 printf("%s, %d\n", new_client.ip, new_client.port);
                 strcpy((char*)new_client.user.username, msg.source);
-                //printf("made it here 1\n");
                 strcpy((char*)new_client.user.password, msg.data);
-                //printf("made it here 2\n");
                 new_client.sockfd = client_sockfd;
                 add_connected_client(&new_client);
-                //printf("Added %s\n", head->client.user.username);
                 print_connected_clients();
 
                 message login_success;
@@ -88,6 +85,33 @@ void* client_connection(void *arg){
                 strcpy((char*)login_success.source, "server");
                 strcpy((char*)login_success.data, "Login successful!");
                 send_message(client_sockfd, &login_success);
+            }
+        } else if (msg.type == REG){
+            if(check_if_user_exists(msg.source, "users.txt") == true){
+                message register_failed;
+                register_failed.type = REG_NAK;
+                register_failed.size = strlen("Register failed, User found!");
+                strcpy((char*)register_failed.source, "server");
+                strcpy((char*)register_failed.data, "Register failed, User found!");
+                send_message(client_sockfd, &register_failed);
+            } else {
+                ConnectedUser new_client;
+                new_client.in_session = false;
+                strcpy(new_client.ip, client_ip);
+                new_client.port = port;
+                printf("%s, %d\n", new_client.ip, new_client.port);
+                strcpy((char*)new_client.user.username, msg.source);
+                strcpy((char*)new_client.user.password, msg.data);
+                new_client.sockfd = client_sockfd;
+                add_connected_client(&new_client);
+                print_connected_clients();
+                append_user_credentials(msg.source, msg.data, "users.txt");
+                message register_success;
+                register_success.type = REG_ACK;
+                register_success.size = strlen("Register successful!");
+                strcpy((char*)register_success.source, "server");
+                strcpy((char*)register_success.data, "Register successful!");
+                send_message(client_sockfd, &register_success);
             }
         } else if (msg.type == JOIN){
             if(is_client_already_in_a_session(msg.source) == true){
@@ -309,13 +333,33 @@ bool is_client_already_connected(char* username){
     return false;
 }
 
-bool check_if_user_exists(char* username, char* password){
-    for(int i = 0; i < MAX_USERS; i++){
-        if(strcmp(users[i].username, username) == 0 && strcmp(users[i].password, password) == 0){
-            return true;
+bool check_if_user_exists(const char *username, const char *filename){
+    char line[MAX_NAME + 50];  // Assume the password won't exceed 50 characters.
+    FILE *file = fopen(filename, "r");
+
+    if (file == NULL) {
+        perror("Unable to open the file");
+        return false;
+    }
+
+    bool exists = false;
+    while (fgets(line, sizeof(line), file)) {
+        // Remove newline character
+        line[strcspn(line, "\n")] = 0;
+
+        // Get the username part of the line
+        char *file_username = strtok(line, ":");
+        
+        // If the username matches, set exists to true
+        printf("comparing %s to %s... \n", username, file_username);
+        if (strcmp(username, file_username) == 0) {
+            exists = true;
+            break;
         }
     }
-    return false;
+
+    fclose(file);
+    return exists;
 }
 
 bool is_client_already_in_a_session(char* username){
@@ -461,4 +505,42 @@ char* build_query_list(ClientNode *head){
         current = current->next;
     }
     return result;
+}
+
+bool check_credentials(const char* username, const char* password){
+    char line[MAX_NAME + 1 + MAX_DATA];
+    char *file_username, *file_password;
+    FILE* file = fopen("users.txt", "r");
+    if(file == NULL){
+        perror("Unable to open file");
+        return false;
+    }
+    while(fgets(line, sizeof(line), file)){
+        line[strcspn(line,"\n")] = 0;
+        file_username = strtok(line, ":");
+        file_password = strtok(NULL, ":");
+        if (strcmp(username, file_username) == 0 && strcmp(password, file_password) == 0) {
+            fclose(file);
+            return true;
+        }
+    }
+    fclose(file);
+    return false;
+}
+
+bool append_user_credentials(const char *username, const char *password, const char *filename) {
+    // Open the file in append mode
+    FILE *file = fopen(filename, "a");
+    if (file == NULL) {
+        perror("Unable to open the file");
+        return false;
+    }
+
+    // Write the username:password to the file followed by a newline
+    fprintf(file, "%s:%s\n", username, password);
+
+    // Close the file
+    fclose(file);
+    
+    return true;
 }
