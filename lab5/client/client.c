@@ -191,7 +191,7 @@ int main(int argc, char **argv) {
             strcpy((char*)text_message.data, args[0]);
             send_message(g.sockfd, &text_message);
         }
-        else if(command == PRIVATEMSG){ // FEATURE: private messaging
+        else if(command == PRIVATEMSG) {
             if(g.logged_in == false){
                 printf("Please log in first!\n");
                 continue;
@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
                 if (args[j + 1] != NULL) strcat(private_message_text, " "); // add spacing between words
             }
 
-            // Construct the full private message text, including recipient's name and the message
+            // construct the full private message text, name + msg
             char pm[MAX_DATA];
             strcpy(pm, args[1]); 
             strcat(pm, ":");
@@ -215,11 +215,7 @@ int main(int argc, char **argv) {
             text_message.type = PRIVATE_MSG;
             strcpy((char*)text_message.source, g.client_name);
             strcpy((char*)text_message.data, pm);
-            text_message.size = strlen(pm); // Set the size based on the full message
-
-            // Debug prints to check the data
-            printf("PM DATA: %s\n", pm);
-            printf("TEXT_MESSAGE DATA: %s\n", text_message.data);
+            text_message.size = strlen(pm); 
 
             send_message(g.sockfd, &text_message);
         }
