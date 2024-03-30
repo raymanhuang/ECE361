@@ -50,6 +50,15 @@ void *listen_for_server_messages(void *arg) {
             printf("Message from %s: ", msg.source);
             printf("%s\n", msg.data);
         }
+        else if (msg.type == PRIVATE_MSG) {
+            char* colon_ptr = strchr((char*)msg.data, ':');
+            if (colon_ptr) {
+                *colon_ptr = '\0';  // Terminate the sender's username string
+                printf("Private message from %s: %s\n", msg.source, colon_ptr + 1);  // Display the message
+            } else {
+                printf("Invalid private message format received.\n");
+            }
+        }
         else if(msg.type == MSG_NAK){
             printf("%s\n", msg.data);
         }
@@ -237,6 +246,34 @@ int main(int argc, char **argv) {
             strcpy((char*)text_message.data, args[0]);
             send_message(g.sockfd, &text_message);
         }
+        else if(command == PRIVATEMSG) {
+            if(g.logged_in == false){
+                printf("Please log in first!\n");
+                continue;
+            }
+
+            // concatenate all parts of the message after the recipient username
+            char private_message_text[MAX_DATA] = {0};
+            for (int j = 2; args[j] != NULL; j++) {
+                strcat(private_message_text, args[j]);
+                if (args[j + 1] != NULL) strcat(private_message_text, " "); // add spacing between words
+            }
+
+            // construct the full private message text, name + msg
+            char pm[MAX_DATA];
+            strcpy(pm, args[1]); 
+            strcat(pm, ":");
+            strcat(pm, private_message_text); 
+
+            // Construct the message
+            message text_message;
+            text_message.type = PRIVATE_MSG;
+            strcpy((char*)text_message.source, g.client_name);
+            strcpy((char*)text_message.data, pm);
+            text_message.size = strlen(pm); 
+
+            send_message(g.sockfd, &text_message);
+        }
         else if(command == LOGOUT){
             if(g.logged_in == false){
                 printf("Please log in first!\n");
@@ -325,6 +362,13 @@ Command handleCommand(char** args) {
                 return LIST;
             } else if (strcmp(args[0], "/quit") == 0) { // done
                 return QUIT;
+            } else if (strcmp(args[0], "/pm") == 0) { // private messaging
+                // checking that it has at least 3 tokens (command, recipient, msg)
+                if (i < 3) { 
+                    printf("/pm requires (user, message)\n");
+                    return INVALID_COMMAND;
+                }
+                return PRIVATEMSG;
             } else if (strcmp(args[0], "/register") == 0){
                 if (i != 5) { // Including the command itself, there should be 5 tokens
                     printf("Error: /register requires 4 arguments (username, password, server_ip, server_port).\n");

@@ -16,7 +16,8 @@ typedef enum {
     LIST,
     QUIT,
     TEXT,
-    REGISTER
+    REGISTER,
+    PRIVATEMSG
 } Command;
 
 void displayPrompt();
