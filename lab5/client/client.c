@@ -44,8 +44,12 @@ void *listen_for_server_messages(void *arg) {
         }
         else if (msg.type == PRIVATE_MSG) {
             char* colon_ptr = strchr((char*)msg.data, ':');
-            *colon_ptr = '\0'; // splitting the recipient and text msg
-            printf("Private message from %s: %s\n", msg.source, colon_ptr + 1);
+            if (colon_ptr) {
+                *colon_ptr = '\0';  // Terminate the sender's username string
+                printf("Private message from %s: %s\n", msg.source, colon_ptr + 1);  // Display the message
+            } else {
+                printf("Invalid private message format received.\n");
+            }
         }
         else if(msg.type == MSG_NAK){
             printf("%s\n", msg.data);
@@ -195,17 +199,28 @@ int main(int argc, char **argv) {
 
             // concatenate all parts of the message after the recipient username
             char private_message_text[MAX_DATA] = {0};
-            for (int j = 2; j < i; j++) {
+            for (int j = 2; args[j] != NULL; j++) {
                 strcat(private_message_text, args[j]);
-                if (j < i - 1) strcat(private_message_text, " "); // add spacing between words
+                if (args[j + 1] != NULL) strcat(private_message_text, " "); // add spacing between words
             }
+
+            // Construct the full private message text, including recipient's name and the message
+            char pm[MAX_DATA];
+            strcpy(pm, args[1]); 
+            strcat(pm, ":");
+            strcat(pm, private_message_text); 
 
             // Construct the message
             message text_message;
             text_message.type = PRIVATE_MSG;
-            text_message.size = strlen(private_message_text);
             strcpy((char*)text_message.source, g.client_name);
-            snprintf((char*)text_message.data, MAX_DATA, "%s:%s", args[1], private_message_text); // "recipient:msg"
+            strcpy((char*)text_message.data, pm);
+            text_message.size = strlen(pm); // Set the size based on the full message
+
+            // Debug prints to check the data
+            printf("PM DATA: %s\n", pm);
+            printf("TEXT_MESSAGE DATA: %s\n", text_message.data);
+
             send_message(g.sockfd, &text_message);
         }
         else if(command == LOGOUT){
@@ -296,10 +311,10 @@ Command handleCommand(char** args) {
                 return LIST;
             } else if (strcmp(args[0], "/quit") == 0) { // done
                 return QUIT;
-            } else if (strcmp(arg[0], "/pm") == 0) { // private messaging
+            } else if (strcmp(args[0], "/pm") == 0) { // private messaging
                 // checking that it has at least 3 tokens (command, recipient, msg)
                 if (i < 3) { 
-                    printf("/pm requires a username and a message.\n");
+                    printf("/pm requires (user, message)\n");
                     return INVALID_COMMAND;
                 }
                 return PRIVATEMSG;
