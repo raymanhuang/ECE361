@@ -156,14 +156,16 @@ void* client_connection(void *arg){
             // getting the recipients name
             char recipient[MAX_NAME];
             char* messageContent = strchr((char*)msg.data, ':');
-            
-            if (messageContent) {
-                *messageContent = '\0'; // replacing : with \0 to end the recipients username string
-                strcpy(recipient, (char*)msg.data);
-                messageContent++; 
 
-                // finding the client and forwarding the msg to that client
+            // check if the colon was found and it's not the last character
+            if (messageContent && *(messageContent + 1) != '\0') {
+                *messageContent = '\0'; 
+                messageContent++; 
+                strcpy(recipient, (char*)msg.data); 
+
                 ClientNode* target = find_client_by_username(recipient);
+                
+                // finding the client and forwarding the msg to that client
                 if (target) {
                     message forwardMsg;
                     forwardMsg.type = PRIVATE_MSG;
