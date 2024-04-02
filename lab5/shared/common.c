@@ -53,7 +53,7 @@ void send_message(int sockfd, message *msg) {
     }
 
     if (bytes_sent == total_size) {
-        printf("Message sent successfully\n");
+        //printf("Message sent successfully\n");
     } else {
         printf("Only sent %d bytes of %d\n", bytes_sent, total_size);
         // Handle partial send
